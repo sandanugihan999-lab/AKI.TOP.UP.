@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Free Fire Player Lookup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Noto+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17131f; --panel: #221c2f; --line: #3a3150;
+    --ember: #ff7a1a; --bone: #f3ede2; --muted: #a095b8; --bad: #ff6b6b;
+    --head: "Chakra Petch", "Segoe UI", sans-serif;
+    --body: "Noto Sans", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--bone); font-family: var(--body);
+    min-height: 100vh; display: flex; justify-content: center; padding: 28px 16px 48px;
+  }
+  main { width: 100%; max-width: 440px; }
+  h1 { font-family: var(--head); font-size: 2rem; line-height: 1.1; margin: 8px 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; margin-bottom: 12px; }
+  input, select, button { font: inherit; border-radius: 6px; }
+  input, select {
+    background: var(--panel); color: var(--bone); border: 1px solid var(--line);
+    padding: 13px 12px; min-width: 0;
+  }
+  input { flex: 1; font-family: var(--head); font-size: 1.1rem; letter-spacing: .04em; }
+  select { width: 84px; }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+  button {
+    width: 100%; background: var(--ember); color: #1d1206; border: 0; cursor: pointer;
+    padding: 14px; font-family: var(--head); font-weight: 700; font-size: 1.05rem;
+  }
+  button:disabled { opacity: .6; cursor: wait; }
+  #msg { min-height: 1.4em; margin: 14px 0; color: var(--bad); }
+  #card { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  #card.show { display: block; animation: pop .25s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .top { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+  .nick { font-family: var(--head); font-weight: 700; font-size: 1.5rem; word-break: break-word; }
+  .meta { color: var(--muted); font-size: .9rem; margin-top: 2px; }
+  dl { margin: 0; }
+  .item { display: flex; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: var(--head); font-weight: 500; }
+  @media (prefers-reduced-motion: reduce) { #card.show { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Free Fire player lookup</h1>
+  <p class="sub">Enter a player ID to see the profile.</p>
+
+  <label for="pid">Player ID</label>
+  <div class="row">
+    <input id="pid" inputmode="numeric" autocomplete="off" placeholder="10133799447" maxlength="15">
+    <select id="region" aria-label="Region">
+      <option value="SG">SG</option>
+      <option value="MY">MY</option>
+    </select>
+  </div>
+  <button id="go">Find player</button>
+
+  <div id="msg" role="alert"></div>
+
+  <section id="card" aria-live="polite">
+    <div class="top">
+      <div class="nick" id="nick"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <dl id="list"></dl>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => (n === undefined || n === null ? "-" : Number(n).toLocaleString());
+
+  async function lookup() {
+    const id = $("pid").value.replace(/\s/g, "");
+    $("msg").textContent = "";
+    $("card").classList.remove("show");
+
+    if (!/^\d{5,15}$/.test(id)) {
+      $("msg").textContent = "Enter 5 to 15 digits.";
+      return;
+    }
+
+    $("go").disabled = true;
+    $("go").textContent = "Searching...";
+    try {
+      const r = await fetch("/api/player", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player_id: id, region: $("region").value }),
+      });
+      const d = await r.json();
+      if (!d.success) { $("msg").textContent = d.error || "Something went wrong."; return; }
+
+      $("nick").textContent = d.nickname;
+      $("meta").textContent = "ID " + d.player_id + " | " + d.region;
+      const rows = [
+        ["Level", fmt(d.level)],
+        ["EXP", fmt(d.exp)],
+        ["Rank points", fmt(d.rank)],
+        ["BR rank", fmt(d.br_rank)],
+        ["CS rank", fmt(d.cs_rank)],
+        ["Likes", fmt(d.liked)],
+        ["Badges", fmt(d.badge_cnt)],
+      ];
+      $("list").innerHTML = "";
+      rows.forEach(([k, v]) => {
+        const div = document.createElement("div");
+        div.className = "item";
+        const dt = document.createElement("dt"); dt.textContent = k;
+        const dd = document.createElement("dd"); dd.textContent = v;
+        div.append(dt, dd);
+        $("list").appendChild(div);
+      });
+      $("card").classList.add("show");
+    } catch (e) {
+      $("msg").textContent = "Network error. Try again.";
+    } finally {
+      $("go").disabled = false;
+      $("go").textContent = "Find player";
+    }
+  }
+
+  $("go").addEventListener("click", lookup);
+  $("pid").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });
+</script>
+</body>
+  </html>
